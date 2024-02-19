@@ -1,0 +1,18 @@
+version: '3'
+services:
+  live:
+    build: ./live
+    ports:
+      - "7880:7880"
+      - "7881:7881"
+      - "7882:7882/udp"
+      - "5349:5349"
+      - "3478:3478/udp"
+    depends_on:
+      - "redis"
+  api:
+    build: ./api
+    ports:
+      - "5000:5000"
+  redis:
+    image: "redis:alpine"
