@@ -13,8 +13,9 @@ redis:
 
 turn:
   enabled: true
-  domain: turn.wikylyu.xyz
+  domain: turn.chainboats.com
   tls_port: 5349
+  udp_port: 3478
   external_tls: true
 
 keys:
