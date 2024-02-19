@@ -35,7 +35,7 @@ class _LivekitPageState extends State<LivekitPage> {
     _connect();
   }
 
-  late Room room;
+  late Room _room;
   late EventsListener<RoomEvent>? _listener;
 
   _connect() async {
@@ -64,11 +64,10 @@ class _LivekitPageState extends State<LivekitPage> {
           dtx: true,
         ));
 
-    room = Room(
+    _room = Room(
       roomOptions: roomOptions,
     );
-    // room.addListener(() {});
-    _listener = room.createListener();
+    _listener = _room.createListener();
     _listener?.on<TrackSubscribedEvent>((p0) {
       setState(() {});
     });
@@ -77,50 +76,59 @@ class _LivekitPageState extends State<LivekitPage> {
         setState(() {});
       },
     );
+    _listener?.on<LocalTrackPublishedEvent>(
+      (p0) {
+        setState(() {});
+      },
+    );
 
     final token = await getToken();
 
-    await room.connect("wss://livekit.wikylyu.xyz", token,
+    await _room.connect("wss://live.chainboats.com", token,
         roomOptions: roomOptions);
     try {
-      // video will fail when running in ios simulator
-      var localVideo =
-          await LocalVideoTrack.createCameraTrack(const CameraCaptureOptions(
-        cameraPosition: CameraPosition.front,
-        params: VideoParametersPresets.h720_169,
-      ));
-      await room.localParticipant?.publishVideoTrack(localVideo);
+      var localVideo = await LocalVideoTrack.createCameraTrack(
+        CameraCaptureOptions(
+          cameraPosition: _cameraPosition,
+          params: VideoParametersPresets.h720_169,
+        ),
+      );
+      _localVideoTrackPublication =
+          await _room.localParticipant?.publishVideoTrack(localVideo);
     } catch (e) {
       debugPrint(e.toString());
     }
 
     try {
-      var localAudio = await LocalAudioTrack.create();
-      await room.localParticipant?.publishAudioTrack(localAudio);
+      await _room.localParticipant?.setMicrophoneEnabled(true);
     } catch (e) {
       debugPrint(e.toString());
     }
     setState(() {});
   }
 
+  CameraPosition _cameraPosition = CameraPosition.front;
+  bool _muted = false;
+  LocalTrackPublication<LocalVideoTrack>? _localVideoTrackPublication;
+
   @override
   void dispose() {
     _listener?.dispose();
-    room.dispose();
+    _room.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     VideoTrack? remoteTrack;
-    for (var participant in room.remoteParticipants.values) {
+    for (var participant in _room.remoteParticipants.values) {
       if (participant.hasVideo) {
         remoteTrack = participant.videoTrackPublications[0].track;
         break;
       }
     }
-    VideoTrack? localTrack = (room.localParticipant?.hasVideo ?? false)
-        ? room.localParticipant?.videoTrackPublications[0].track
+    VideoTrack? localTrack = (_room.localParticipant?.hasVideo ?? false)
+        ? _room.localParticipant?.videoTrackPublications[0].track
         : null;
 
     return Scaffold(
@@ -134,14 +142,65 @@ class _LivekitPageState extends State<LivekitPage> {
           Positioned(
             right: 20,
             top: 20,
-            child: SizedBox(
-              width: 120,
-              height: 180,
-              child: TrackRenderWidget(track: localTrack),
+            child: Column(
+              children: [
+                SizedBox(
+                  width: 120,
+                  height: 180,
+                  child: TrackRenderWidget(track: localTrack),
+                ),
+                const SizedBox(
+                  width: 10,
+                ),
+                Row(
+                  children: [
+                    IconButton(
+                      onPressed: _switchCamera,
+                      icon: const Icon(Icons.cameraswitch),
+                    ),
+                    const SizedBox(
+                      width: 10,
+                    ),
+                    IconButton(
+                      onPressed: _switchMute,
+                      icon: Icon(_muted ? Icons.volume_off : Icons.volume_up),
+                    ),
+                  ],
+                )
+              ],
             ),
           ),
         ],
       ),
     );
+  }
+
+  _switchCamera() async {
+    _cameraPosition = _cameraPosition == CameraPosition.front
+        ? CameraPosition.back
+        : CameraPosition.front;
+    try {
+      if (_localVideoTrackPublication != null) {
+        _room.localParticipant
+            ?.removePublishedTrack(_localVideoTrackPublication!.sid);
+      }
+      var localVideo = await LocalVideoTrack.createCameraTrack(
+        CameraCaptureOptions(
+          cameraPosition: _cameraPosition,
+          params: VideoParametersPresets.h720_169,
+        ),
+      );
+      _localVideoTrackPublication =
+          await _room.localParticipant?.publishVideoTrack(localVideo);
+    } catch (e) {
+      debugPrint(e.toString());
+    }
+    setState(() {});
+  }
+
+  _switchMute() async {
+    _muted = !_muted;
+    _room.localParticipant?.setMicrophoneEnabled(!_muted);
+    setState(() {});
   }
 }
